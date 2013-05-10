@@ -12,7 +12,7 @@
  * AUTHORS:
  *   Mike Crawford
  *   Ben Maurer
- *   Pavlo Sadovyi (made wrapper for Phalcon Framework)
+ *   Pavlo Sadovyi (made this wrapper for Phalcon Framework)
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -32,45 +32,53 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
+
 namespace Hakaba\Libraries;
 
 class Recaptcha extends \Phalcon\DI\Injectable
 {
-    /**
+	/**
      * The reCAPTCHA server URL's
      */
     const RECAPTCHA_API_SERVER = 'http://www.google.com/recaptcha/api';
     const RECAPTCHA_API_SECURE_SERVER = 'https://www.google.com/recaptcha/api';
     const RECAPTCHA_VERIFY_SERVER = 'www.google.com';
 
-    public $is_valid = false;
-    public $error = 'incorrect-captcha-sol';
-
     /**
+     * The reCAPTCHA error messages
+     */
+    const RECAPTCHA_ERROR_KEY = 'To use reCAPTCHA you must get an API key from <a href="https://www.google.com/recaptcha/admin/create">https://www.google.com/recaptcha/admin/create</a>';
+    const RECAPTCHA_ERROR_REMOTE_IP = 'For security reasons, you must pass the remote IP address to reCAPTCHA';
+
+    
+    public static $error = 'incorrect-captcha-sol';
+    public static $is_valid = false;
+
+	/**
      * Gets the challenge HTML (javascript and non-javascript version).
      * This is called from the browser, and the resulting reCAPTCHA HTML widget
      * is embedded within the HTML form it was called from.
-     * @param string $publicKey A public key for reCAPTCHA
-     * @param string $error The error given by reCAPTCHA (optional, default is null)
-     * @param boolean $use_ssl Should the request be made over ssl? (optional, default is false)
+     *
+     * @param string $publicKey A public key for reCAPTCHA (optional, default is false)
+     * @param string $error The error given by reCAPTCHA (optional, default is '')
+     * @param boolean $useSSL Should the request be made over ssl? (optional, default is false)
      * @return string - The HTML to be embedded in the user's form.
      */
-    public function getHtml($publicKey, $error = null, $useSSL = false)
+    public static function get($publicKey, $error = '', $useSSL = false)
     {
-        if (!$publicKey) {
-            die("To use reCAPTCHA you must get an API key from <a href='https://www.google.com/recaptcha/admin/create'>https://www.google.com/recaptcha/admin/create</a>");
-        }
+    	// Merging method arguments with class fileds 
+    	$publicKey = $publicKey or die(self::RECAPTCHA_ERROR_KEY);
 
+    	// Choosing a server
         $server = $useSSL ? self::RECAPTCHA_API_SECURE_SERVER : self::RECAPTCHA_API_SERVER;
 
-        $errorpart = '';
-        if ($error) {
-            $errorpart = "&amp;error=".$error;
-        }
+        // Append an error
+        if ($error) $error = "&amp;error=".$error;
 
-        return '<script type="text/javascript" src="'.$server.'/challenge?k='.$publicKey.$errorpart.'"></script>
+        // Return HTML
+        return '<script type="text/javascript" src="'.$server.'/challenge?k='.$publicKey.$error.'"></script>
         <noscript>
-            <iframe src="'.$server.'/noscript?k='.$publicKey.$errorpart.'" height="300" width="500" frameborder="0"></iframe><br/>
+            <iframe src="'.$server.'/noscript?k='.$publicKey.$error.'" height="300" width="500" frameborder="0"></iframe><br/>
             <textarea name="recaptcha_challenge_field" rows="3" cols="40"></textarea>
             <input type="hidden" name="recaptcha_response_field" value="manual_challenge"/>
         </noscript>';
@@ -78,110 +86,50 @@ class Recaptcha extends \Phalcon\DI\Injectable
 
     /**
      * Calls an HTTP POST function to verify if the user's guess was correct
+     *
      * @param string $privateKey
      * @param string $remoteip
      * @param string $challenge
      * @param string $response
-     * @param array $extra_params an array of extra variables to post to the server
-     * @return is_valid property
+     * @param array $extra_params An array of extra variables to post to the server
+     * @return boolean $this->is_valid property
      */
-    public function checkAnswer($privateKey, $remoteip, $challenge, $response, $extra_params = array())
+    public static function check($privateKey, $remoteIP, $challenge, $response, $extra_params = array())
     {
-        if ($privateKey == null || $privateKey == '') {
-            die('To use reCAPTCHA you must get an API key from <a href="https://www.google.com/recaptcha/admin/create">https://www.google.com/recaptcha/admin/create</a>');
-        }
-
-        if ($remoteip == null || $remoteip == '') {
-            die('For security reasons, you must pass the remote ip to reCAPTCHA');
-        }
+        $privateKey = $privateKey or die(self::RECAPTCHA_ERROR_KEY);
+        $remoteIP = $remoteIP or die(self::RECAPTCHA_ERROR_REMOTE_IP);
 
         // Discard spam submissions
-        if ($challenge == null || strlen($challenge) == 0 || $response == null || strlen($response) == 0) {
-            return $this->is_valid;
-        }
+        if (!$challenge or !$response)
+            return self::$is_valid;
 
-        $response = $this->httpPost(self::RECAPTCHA_VERIFY_SERVER, "/recaptcha/api/verify", array(
+        $response = self::httpPost(self::RECAPTCHA_VERIFY_SERVER, "/recaptcha/api/verify", array(
             'privatekey' => $privateKey,
-            'remoteip' => $remoteip,
+            'remoteip' => $remoteIP,
             'challenge' => $challenge,
             'response' => $response
         ) + $extra_params);
 
         $answers = explode("\n", $response[1]);
         
-        if (trim($answers[0]) == 'true') $this->is_valid = true;
-        else $this->error = $answers[1];
+        if (trim($answers[0]) == 'true') self::$is_valid = true;
+        else self::$error = $answers[1];
 
-        return $this->is_valid;
-    }
-
-    /**
-     * gets a URL where the user can sign up for reCAPTCHA. If your application
-     * has a configuration page where you enter a key, you should provide a link
-     * using this function.
-     * @param string $domain The domain where the page is hosted
-     * @param string $appname The name of your application
-     */
-    public function getSignupUrl($domain = null, $appName = null)
-    {
-        return "https://www.google.com/recaptcha/admin/create?".$this->qsEncode(array('domains' => $domain, 'app' => $appName));
-    }
-
-    /* gets the reCAPTCHA Mailhide url for a given email, public key and private key */
-    public function mailhideUrl($publicKey, $privateKey, $email)
-    {
-        if ($publicKey == '' || $publicKey == null || $privateKey == '' || $privateKey == null) {
-            die('To use reCAPTCHA Mailhide, you have to sign up for a public and private key, you can do so at <a href="http://www.google.com/recaptcha/mailhide/apikey">http://www.google.com/recaptcha/mailhide/apikey</a>');
-        }
-        
-        $key = pack('H*', $privateKey);
-        $cryptmail = $this->aesEncrypt($email, $key);
-        
-        return "http://www.google.com/recaptcha/mailhide/d?k=".$publicKey."&c=".$this->mailhideUrlBase64($cryptmail);
-    }
-
-    /**
-     * Gets HTML to display an email address given a public an private key.
-     * to get a key, go to:
-     *
-     * http://www.google.com/recaptcha/mailhide/apikey
-     */
-    public function mailhideHtml($publicKey, $privateKey, $email)
-    {
-        $emailparts = $this->mailhideEmailParts($email);
-        $url = mailhideUrl($publicKey, $privateKey, $email);
-        
-        return htmlentities($emailparts[0])."<a href='".htmlentities($url)."' onclick=\"window.open('".htmlentities($url)."', '', 'toolbar=0,scrollbars=0,location=0,statusbar=0,menubar=0,resizable=0,width=500,height=300'); return false;\" title=\"Reveal this e-mail address\">...</a>@".htmlentities($emailparts[1]);
-    }
-
-    /**
-     * Encodes the given data into a query string format
-     * @param $data - array of string elements to be encoded
-     * @return string - encoded request
-     */
-    private function qsEncode($data)
-    {
-        $req = '';
-        foreach ($data as $key => $value)
-            $req .= $key.'='.urlencode(stripslashes($value)).'&';
-
-        // Cut the last '&'
-        $req = substr($req, 0, strlen($req) - 1);
-
-        return $req;
+        return self::$is_valid;
     }
 
     /**
      * Submits an HTTP POST to a reCAPTCHA server
+     *
      * @param string $host
      * @param string $path
      * @param array $data
      * @param int port
      * @return array response
      */
-    private function httpPost($host, $path, $data, $port = 80)
+    private static function httpPost($host, $path, $data, $port = 80)
     {
-        $req = $this->qsEncode($data);
+        $req = self::qsEncode($data);
 
         $http_request  = "POST $path HTTP/1.0\r\n";
         $http_request .= "Host: $host\r\n";
@@ -205,50 +153,21 @@ class Recaptcha extends \Phalcon\DI\Injectable
         return $response;
     }
 
-    /* Mailhide related code */
-    private function aesPad($value)
-    {
-        $block_size = 16;
-        $numpad = $block_size - (strlen($value) % $block_size);
-
-        return str_pad($value, strlen($value) + $numpad, chr($numpad));
-    }
-
-    /* Mailhide related code */
-    private function aesEncrypt($value, $key)
-    {
-        if (!function_exists('mcrypt_encrypt')) {
-            die('To use reCAPTCHA Mailhide, you need to have the mcrypt php module installed.');
-        }
-
-        $mode = MCRYPT_MODE_CBC;   
-        $enc = MCRYPT_RIJNDAEL_128;
-        $value = $this->aesPad($value);
-
-        return mcrypt_encrypt($enc, $key, $value, $mode, "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0");
-    }
-
-    private function mailhideUrlBase64($x)
-    {
-        return strtr(base64_encode($x), '+/', '-_');
-    }
-
     /**
-     * Gets the parts of the email to expose to the user.
-     * e.g, given johndoe@example,com return ["john", "example.com"].
-     * the email is then displayed as john...@example.com
+     * Encodes the given data into a query string format
+     *
+     * @param array $data Array of string elements to be encoded
+     * @return string $req Encoded request
      */
-    private function mailhideEmailParts($email)
+    private static function qsEncode($data)
     {
-        $arr = preg_split('/@/', $email);
+        $req = '';
+        foreach ($data as $key => $value)
+            $req .= $key.'='.urlencode(stripslashes($value)).'&';
 
-        if (strlen ($arr[0]) <= 4)
-            $arr[0] = substr($arr[0], 0, 1);
-        else if (strlen ($arr[0]) <= 6)
-            $arr[0] = substr($arr[0], 0, 3);
-        else
-            $arr[0] = substr($arr[0], 0, 4);
+        // Cut the last '&'
+        $req = substr($req, 0, strlen($req) - 1);
 
-        return $arr;
+        return $req;
     }
 }
