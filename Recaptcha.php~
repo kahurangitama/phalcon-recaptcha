@@ -33,9 +33,11 @@
  * THE SOFTWARE.
  */
 
+namespace Hakaba\Libraries;
+
 class Recaptcha extends \Phalcon\DI\Injectable
 {
-    /**
+	/**
      * The reCAPTCHA server URL's
      */
     const RECAPTCHA_API_SERVER = 'http://www.google.com/recaptcha/api';
@@ -52,7 +54,7 @@ class Recaptcha extends \Phalcon\DI\Injectable
     public static $error = 'incorrect-captcha-sol';
     public static $is_valid = false;
 
-    /**
+	/**
      * Gets the challenge HTML (javascript and non-javascript version).
      * This is called from the browser, and the resulting reCAPTCHA HTML widget
      * is embedded within the HTML form it was called from.
@@ -64,10 +66,10 @@ class Recaptcha extends \Phalcon\DI\Injectable
      */
     public static function get($publicKey, $error = '', $useSSL = false)
     {
-        // Merging method arguments with class fileds 
-        $publicKey = $publicKey or die(self::RECAPTCHA_ERROR_KEY);
+    	// Merging method arguments with class fileds 
+    	$publicKey = $publicKey or die(self::RECAPTCHA_ERROR_KEY);
 
-        // Choosing a server
+    	// Choosing a server
         $server = $useSSL ? self::RECAPTCHA_API_SECURE_SERVER : self::RECAPTCHA_API_SERVER;
 
         // Append an error
