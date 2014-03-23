@@ -65,7 +65,9 @@ class Recaptcha extends \Phalcon\DI\Injectable
     public static function get($publicKey, $error = '', $useSSL = false)
     {
         // Merging method arguments with class fileds 
-        $publicKey = $publicKey or die(self::RECAPTCHA_ERROR_KEY);
+        if (!$publicKey) {
+            throw new \Phalcon\Exception(self::RECAPTCHA_ERROR_KEY);
+        }
 
         // Choosing a server
         $server = $useSSL ? self::RECAPTCHA_API_SECURE_SERVER : self::RECAPTCHA_API_SERVER;
@@ -94,8 +96,12 @@ class Recaptcha extends \Phalcon\DI\Injectable
      */
     public static function check($privateKey, $remoteIP, $challenge, $response, $extra_params = array())
     {
-        $privateKey = $privateKey or die(self::RECAPTCHA_ERROR_KEY);
-        $remoteIP = $remoteIP or die(self::RECAPTCHA_ERROR_REMOTE_IP);
+        if (!$privateKey) {
+            throw new \Phalcon\Exception(self::RECAPTCHA_ERROR_KEY);
+        }
+        if (!$remoteIP) {
+            throw new \Phalcon\Exception(self::RECAPTCHA_ERROR_REMOTE_IP);
+        }
 
         // Discard spam submissions
         if (!$challenge or !$response)
@@ -139,7 +145,7 @@ class Recaptcha extends \Phalcon\DI\Injectable
 
         $response = '';
         if (!($fs = @fsockopen($host, $port, $errno, $errstr, 10))) {
-            die('Could not open socket');
+            throw new \Phalcon\Exception('Could not open socket');
         }
 
         fwrite($fs, $http_request);
